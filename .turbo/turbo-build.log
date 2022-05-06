@@ -1,0 +1,26 @@
+[32mnext-auth:build: [0mcache hit, replaying output [2mc0ede1ed135466f0[0m
+[32mnext-auth:build: [0m
+[32mnext-auth:build: [0m> next-auth@4.3.4 build /Users/jozieloliveirasantos/Documents/nextron/next-auth/packages/next-auth
+[32mnext-auth:build: [0m> pnpm clean && pnpm build:js && pnpm build:css
+[32mnext-auth:build: [0m
+[32mnext-auth:build: [0m
+[32mnext-auth:build: [0m> next-auth@4.3.4 clean /Users/jozieloliveirasantos/Documents/nextron/next-auth/packages/next-auth
+[32mnext-auth:build: [0m> rm -rf client css lib providers core jwt react next index.d.ts index.js adapters.d.ts middleware.d.ts middleware.js
+[32mnext-auth:build: [0m
+[32mnext-auth:build: [0m
+[32mnext-auth:build: [0m> next-auth@4.3.4 build:js /Users/jozieloliveirasantos/Documents/nextron/next-auth/packages/next-auth
+[32mnext-auth:build: [0m> pnpm clean && pnpm generate-providers && tsc && babel --config-file ./config/babel.config.js src --out-dir . --extensions ".tsx,.ts,.js,.jsx"
+[32mnext-auth:build: [0m
+[32mnext-auth:build: [0m
+[32mnext-auth:build: [0m> next-auth@4.3.4 clean /Users/jozieloliveirasantos/Documents/nextron/next-auth/packages/next-auth
+[32mnext-auth:build: [0m> rm -rf client css lib providers core jwt react next index.d.ts index.js adapters.d.ts middleware.d.ts middleware.js
+[32mnext-auth:build: [0m
+[32mnext-auth:build: [0m
+[32mnext-auth:build: [0m> next-auth@4.3.4 generate-providers /Users/jozieloliveirasantos/Documents/nextron/next-auth/packages/next-auth
+[32mnext-auth:build: [0m> node ./config/generate-providers.js
+[32mnext-auth:build: [0m
+[32mnext-auth:build: [0mSuccessfully compiled 103 files with Babel (1955ms).
+[32mnext-auth:build: [0m
+[32mnext-auth:build: [0m> next-auth@4.3.4 build:css /Users/jozieloliveirasantos/Documents/nextron/next-auth/packages/next-auth
+[32mnext-auth:build: [0m> postcss --config config/postcss.config.js src/**/*.css --base src --dir . && node config/wrap-css.js
+[32mnext-auth:build: [0m
