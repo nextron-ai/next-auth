@@ -1,12 +1,12 @@
 import { render, screen, waitFor } from "@testing-library/react"
 import { rest } from "msw"
 import { server, mockSession } from "./helpers/mocks"
-import logger from "../../lib/logger"
+import logger from "../../utils/logger"
 import { useState, useEffect } from "react"
 import { getSession } from "../../react"
 import { getBroadcastEvents } from "./helpers/utils"
 
-jest.mock("../../lib/logger", () => ({
+jest.mock("../../utils/logger", () => ({
   __esModule: true,
   default: {
     warn: jest.fn(),
@@ -71,7 +71,7 @@ test("if there's an error fetching the session, it should log it", async () => {
   await waitFor(() => {
     expect(logger.error).toHaveBeenCalledTimes(1)
     expect(logger.error).toBeCalledWith("CLIENT_FETCH_ERROR", {
-      path: "session",
+      url: "/api/auth/session",
       error: new SyntaxError("Unexpected token S in JSON at position 0"),
     })
   })

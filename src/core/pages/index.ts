@@ -5,13 +5,13 @@ import VerifyRequestPage from "./verify-request"
 import ErrorPage from "./error"
 import css from "../../css"
 
-import type { InternalOptions } from "../../lib/types"
-import type { IncomingRequest, OutgoingResponse } from ".."
+import type { InternalOptions } from "../types"
+import type { RequestInternal, ResponseInternal } from ".."
 import type { Cookie } from "../lib/cookie"
 import type { ErrorType } from "./error"
 
 type RenderPageParams = {
-  query?: IncomingRequest["query"]
+  query?: RequestInternal["query"]
   cookies?: Cookie[]
 } & Partial<
   Pick<
@@ -27,7 +27,7 @@ type RenderPageParams = {
 export default function renderPage(params: RenderPageParams) {
   const { url, theme, query, cookies } = params
 
-  function send({ html, title, status }: any): OutgoingResponse {
+  function send({ html, title, status }: any): ResponseInternal {
     return {
       cookies,
       status,

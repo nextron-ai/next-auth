@@ -9,8 +9,8 @@
 // We use HTTP POST requests with CSRF Tokens to protect against CSRF attacks.
 
 import * as React from "react"
-import _logger, { proxyLogger } from "../lib/logger"
-import parseUrl from "../lib/parse-url"
+import _logger, { proxyLogger } from "../utils/logger"
+import parseUrl from "../utils/parse-url"
 import { Session } from ".."
 import {
   BroadcastChannel,
@@ -18,7 +18,7 @@ import {
   apiBaseUrl,
   fetchData,
   now,
-  NextAuthClientConfig,
+  AuthClientConfig,
 } from "../client/_utils"
 
 import type {
@@ -46,7 +46,7 @@ export * from "./types"
 //    relative URLs are valid in that context and so defaults to empty.
 // 2. When invoked server side the value is picked up from an environment
 //    variable and defaults to 'http://localhost:3000'.
-const __NEXTAUTH: NextAuthClientConfig = {
+const __NEXTAUTH: AuthClientConfig = {
   baseUrl: parseUrl(process.env.NEXTAUTH_URL ?? process.env.VERCEL_URL).origin,
   basePath: parseUrl(process.env.NEXTAUTH_URL).path,
   baseUrlServer: parseUrl(
@@ -66,17 +66,44 @@ const broadcast = BroadcastChannel()
 
 const logger = proxyLogger(_logger, __NEXTAUTH.basePath)
 
+function useOnline() {
+  const [isOnline, setIsOnline] = React.useState(
+    typeof navigator !== "undefined" ? navigator.onLine : false
+  )
+
+  const setOnline = () => setIsOnline(true)
+  const setOffline = () => setIsOnline(false)
+
+  React.useEffect(() => {
+    window.addEventListener("online", setOnline)
+    window.addEventListener("offline", setOffline)
+
+    return () => {
+      window.removeEventListener("online", setOnline)
+      window.removeEventListener("offline", setOffline)
+    }
+  }, [])
+
+  return isOnline
+}
+
+type UpdateSession = (data?: any) => Promise<Session | null>
+
 export type SessionContextValue<R extends boolean = false> = R extends true
   ?
-      | { data: Session; status: "authenticated" }
-      | { data: null; status: "loading" }
+      | { update: UpdateSession; data: Session; status: "authenticated" }
+      | { update: UpdateSession; data: null; status: "loading" }
   :
-      | { data: Session; status: "authenticated" }
-      | { data: null; status: "unauthenticated" | "loading" }
+      | { update: UpdateSession; data: Session; status: "authenticated" }
+      | {
+          update: UpdateSession
+          data: null
+          status: "unauthenticated" | "loading"
+        }
 
-const SessionContext = React.createContext<SessionContextValue | undefined>(
-  undefined
-)
+export const SessionContext = React.createContext?.<
+  SessionContextValue | undefined
+>(undefined)
 
 /**
  * React Hook that gives you access
@@ -84,7 +111,13 @@ const SessionContext = React.createContext<SessionContextValue | undefined>(
  *
  * [Documentation](https://next-auth.js.org/getting-started/client#usesession)
  */
-export function useSession<R extends boolean>(options?: UseSessionOptions<R>) {
+export function useSession<R extends boolean>(
+  options?: UseSessionOptions<R>
+): SessionContextValue<R> {
+  if (!SessionContext) {
+    throw new Error("React Context is unavailable in Server Components")
+  }
+
   // @ts-expect-error Satisfy TS if branch on line below
   const value: SessionContextValue<R> = React.useContext(SessionContext)
   if (!value && process.env.NODE_ENV !== "production") {
@@ -109,7 +142,11 @@ export function useSession<R extends boolean>(options?: UseSessionOptions<R>) {
   }, [requiredAndNotLoading, onUnauthenticated])
 
   if (requiredAndNotLoading) {
-    return { data: value.data, status: "loading" } as const
+    return {
+      data: value.data,
+      update: value.update,
+      status: "loading",
+    }
   }
 
   return value
@@ -175,7 +212,11 @@ export async function getProviders() {
 export async function signIn<
   P extends RedirectableProviderType | undefined = undefined
 >(
-  provider?: LiteralUnion<BuiltInProviderType>,
+  provider?: LiteralUnion<
+    P extends RedirectableProviderType
+      ? P | BuiltInProviderType
+      : BuiltInProviderType
+  >,
   options?: SignInOptions,
   authorizationParams?: SignInAuthorizationParams
 ): Promise<
@@ -224,6 +265,7 @@ export async function signIn<
 
   const data = await res.json()
 
+  // TODO: Do not redirect for Credentials and Email providers by default in next major
   if (redirect || !isSupportingReturn) {
     const url = data.url ?? callbackUrl
     window.location.href = url
@@ -296,7 +338,11 @@ export async function signOut<R extends boolean = true>(
  * [Documentation](https://next-auth.js.org/getting-started/client#sessionprovider)
  */
 export function SessionProvider(props: SessionProviderProps) {
-  const { children, basePath } = props
+  if (!SessionContext) {
+    throw new Error("React Context is unavailable in Server Components")
+  }
+
+  const { children, basePath, refetchInterval, refetchWhenOffline } = props
 
   if (basePath) __NEXTAUTH.basePath = basePath
 
@@ -399,10 +445,12 @@ export function SessionProvider(props: SessionProviderProps) {
       document.removeEventListener("visibilitychange", visibilityHandler, false)
   }, [props.refetchOnWindowFocus])
 
+  const isOnline = useOnline()
+  // TODO: Flip this behavior in next major version
+  const shouldRefetch = refetchWhenOffline !== false || isOnline
+
   React.useEffect(() => {
-    const { refetchInterval } = props
-    // Set up polling
-    if (refetchInterval) {
+    if (refetchInterval && shouldRefetch) {
       const refetchIntervalTimer = setInterval(() => {
         if (__NEXTAUTH._session) {
           __NEXTAUTH._getSession({ event: "poll" })
@@ -410,7 +458,7 @@ export function SessionProvider(props: SessionProviderProps) {
       }, refetchInterval * 1000)
       return () => clearInterval(refetchIntervalTimer)
     }
-  }, [props.refetchInterval])
+  }, [refetchInterval, shouldRefetch])
 
   const value: any = React.useMemo(
     () => ({
@@ -420,6 +468,22 @@ export function SessionProvider(props: SessionProviderProps) {
         : session
         ? "authenticated"
         : "unauthenticated",
+      async update(data) {
+        if (loading || !session) return
+        setLoading(true)
+        const newSession = await fetchData<Session>(
+          "session",
+          __NEXTAUTH,
+          logger,
+          { req: { body: { csrfToken: await getCsrfToken(), data } } }
+        )
+        setLoading(false)
+        if (newSession) {
+          setSession(newSession)
+          broadcast.post({ event: "session", data: { trigger: "getSession" } })
+        }
+        return newSession
+      },
     }),
     [session, loading]
   )
