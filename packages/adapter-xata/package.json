@@ -1,0 +1,55 @@
+{
+  "name": "@auth/xata-adapter",
+  "version": "0.1.0",
+  "description": "Xata adapter for Auth.js",
+  "homepage": "https://authjs.dev",
+  "repository": "https://github.com/nextauthjs/next-auth",
+  "bugs": {
+    "url": "https://github.com/nextauthjs/next-auth/issues"
+  },
+  "author": "Tejas Kumar",
+  "type": "module",
+  "types": "./index.d.ts",
+  "files": [
+    "*.js",
+    "*.d.ts*",
+    "src"
+  ],
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js"
+    }
+  },
+  "license": "ISC",
+  "keywords": [
+    "next-auth",
+    "next.js",
+    "oauth",
+    "xata"
+  ],
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@auth/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@xata.io/client": ">=0.13.0"
+  },
+  "devDependencies": {
+    "@auth/adapter-test": "workspace:^0.0.0",
+    "@auth/tsconfig": "workspace:^0.0.0",
+    "jest": "^27.4.3",
+    "@xata.io/client": "^0.13.0",
+    "typescript": "5.2.2"
+  },
+  "jest": {
+    "preset": "@auth/adapter-test/jest"
+  }
+}

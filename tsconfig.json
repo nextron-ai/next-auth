@@ -1,9 +1,14 @@
 {
-  "extends": "@next-auth/tsconfig/base.json",
+  "extends": "@auth/tsconfig/tsconfig.base.json",
   "compilerOptions": {
+    "declarationMap": true,
     "emitDeclarationOnly": true,
     "strictNullChecks": true,
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": true,
     "strict": false,
     "module": "esnext",
@@ -14,7 +19,28 @@
     "stripInternal": true,
     "skipDefaultLibCheck": true,
     "baseUrl": ".",
-    "outDir": "."
+    "outDir": ".",
+    "rootDir": "src",
+    "paths": {
+      "next": [
+        "node_modules/next"
+      ],
+      "react": [
+        "node_modules/react"
+      ]
+    }
   },
-  "exclude": ["./*.js", "./*.d.ts", "config", "**/__tests__"]
+  "include": [
+    "src/**/*",
+    "tests/**/*",
+    "config/**/*"
+  ],
+  "exclude": [
+    "./*.js",
+    "./*.d.ts",
+    "./config",
+    "./tests",
+    "./coverage",
+    "./**/__test__"
+  ]
 }
