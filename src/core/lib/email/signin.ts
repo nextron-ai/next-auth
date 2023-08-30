@@ -1,6 +1,6 @@
 import { randomBytes } from "crypto"
+import { InternalOptions } from "../../../lib/types"
 import { hashToken } from "../utils"
-import type { InternalOptions } from "../../types"
 
 /**
  * Starts an e-mail login flow, by generating a token,
@@ -9,8 +9,9 @@ import type { InternalOptions } from "../../types"
 export default async function email(
   identifier: string,
   options: InternalOptions<"email">
-): Promise<string> {
-  const { url, adapter, provider, callbackUrl, theme } = options
+) {
+  const { url, adapter, provider, logger, callbackUrl } = options
+
   // Generate token
   const token =
     (await provider.generateVerificationToken?.()) ??
@@ -21,30 +22,33 @@ export default async function email(
     Date.now() + (provider.maxAge ?? ONE_DAY_IN_SECONDS) * 1000
   )
 
+  // Save in database
+  // @ts-expect-error
+  await adapter.createVerificationToken({
+    identifier,
+    token: hashToken(token, options),
+    expires,
+  })
+
   // Generate a link with email, unhashed token and callback url
   const params = new URLSearchParams({ callbackUrl, token, email: identifier })
   const _url = `${url}/callback/${provider.id}?${params}`
 
-  await Promise.all([
+  try {
     // Send to user
-    provider.sendVerificationRequest({
+    await provider.sendVerificationRequest({
       identifier,
       token,
       expires,
       url: _url,
       provider,
-      theme,
-    }),
-    // Save in database
-    adapter.createVerificationToken({
+    })
+  } catch (error) {
+    logger.error("SEND_VERIFICATION_EMAIL_ERROR", {
       identifier,
-      token: hashToken(token, options),
-      expires,
-    }),
-  ])
-
-  return `${url}/verify-request?${new URLSearchParams({
-    provider: provider.id,
-    type: provider.type,
-  })}`
+      url,
+      error: error as Error,
+    })
+    throw new Error("SEND_VERIFICATION_EMAIL_ERROR")
+  }
 }

@@ -17,7 +17,7 @@ type Client = InstanceType<Issuer["Client"]>
 
 export type { OAuthProviderType } from "./oauth-types"
 
-type ChecksType = "pkce" | "state" | "none" | "nonce"
+type ChecksType = "pkce" | "state" | "both" | "none"
 
 export type OAuthChecks = OpenIDCallbackChecks | OAuthCallbackChecks
 
@@ -89,15 +89,6 @@ export type UserinfoEndpointHandler = EndpointHandler<
   Profile
 >
 
-export interface OAuthProviderButtonStyles {
-  logo: string
-  logoDark: string
-  bg: string
-  bgDark: string
-  text: string
-  textDark: string
-}
-
 export interface OAuthConfig<P> extends CommonProviderOptions, PartialIssuer {
   /**
    * OpenID Connect (OIDC) compliant providers can configure
@@ -109,7 +100,6 @@ export interface OAuthConfig<P> extends CommonProviderOptions, PartialIssuer {
    * [Authorization Server Metadata](https://datatracker.ietf.org/doc/html/rfc8414#section-3)
    */
   wellKnown?: string
-  jwks_endpoint?: string
   /**
    * The login process will be initiated by sending the user to this URL.
    *
@@ -120,7 +110,7 @@ export interface OAuthConfig<P> extends CommonProviderOptions, PartialIssuer {
   userinfo?: string | UserinfoEndpointHandler
   type: "oauth"
   version?: string
-  profile: (profile: P, tokens: TokenSet) => Awaitable<User>
+  profile?: (profile: P, tokens: TokenSet) => Awaitable<User & { id: string }>
   checks?: ChecksType | ChecksType[]
   client?: Partial<ClientMetadata>
   jwks?: { keys: JWK[] }
@@ -143,8 +133,6 @@ export interface OAuthConfig<P> extends CommonProviderOptions, PartialIssuer {
   /** Read more at: https://github.com/panva/node-openid-client/tree/main/docs#customizing-http-requests */
   httpOptions?: HttpOptions
 
-  style?: OAuthProviderButtonStyles
-
   /**
    * The options provided by the user.
    * We will perform a deep-merge of these values
@@ -157,7 +145,6 @@ export interface OAuthConfig<P> extends CommonProviderOptions, PartialIssuer {
   requestTokenUrl?: string
   profileUrl?: string
   encoding?: string
-  allowDangerousEmailAccountLinking?: boolean
 }
 
 export type OAuthUserConfig<P> = Omit<

@@ -1,24 +1,22 @@
 import oAuthCallback from "../lib/oauth/callback"
 import callbackHandler from "../lib/callback-handler"
 import { hashToken } from "../lib/utils"
-import getAdapterUserFromEmail from "../lib/email/getUserFromEmail"
 
-import type { InternalOptions } from "../types"
-import type { RequestInternal, ResponseInternal } from ".."
+import type { InternalOptions } from "../../lib/types"
+import type { IncomingRequest, OutgoingResponse } from ".."
 import type { Cookie, SessionStore } from "../lib/cookie"
 import type { User } from "../.."
-import type { AdapterSession } from "../../adapters"
 
 /** Handle callbacks from login services */
 export default async function callback(params: {
-  options: InternalOptions
-  query: RequestInternal["query"]
-  method: Required<RequestInternal>["method"]
-  body: RequestInternal["body"]
-  headers: RequestInternal["headers"]
-  cookies: RequestInternal["cookies"]
+  options: InternalOptions<"oauth" | "credentials" | "email">
+  query: IncomingRequest["query"]
+  method: Required<IncomingRequest>["method"]
+  body: IncomingRequest["body"]
+  headers: IncomingRequest["headers"]
+  cookies: IncomingRequest["cookies"]
   sessionStore: SessionStore
-}): Promise<ResponseInternal> {
+}): Promise<OutgoingResponse> {
   const { options, query, body, method, headers, sessionStore } = params
   const {
     provider,
@@ -52,7 +50,7 @@ export default async function callback(params: {
         cookies: params.cookies,
       })
 
-      if (oauthCookies.length) cookies.push(...oauthCookies)
+      if (oauthCookies) cookies.push(...oauthCookies)
 
       try {
         // Make it easier to debug when adding a new provider
@@ -70,7 +68,7 @@ export default async function callback(params: {
         // Note: In oAuthCallback an error is logged with debug info, so it
         // should at least be visible to developers what happened if it is an
         // error with the provider.
-        if (!profile || !account || !OAuthProfile) {
+        if (!profile) {
           return { redirect: `${url}/signin`, cookies }
         }
 
@@ -82,6 +80,7 @@ export default async function callback(params: {
         if (adapter) {
           const { getUserByAccount } = adapter
           const userByAccount = await getUserByAccount({
+            // @ts-expect-error
             providerAccountId: account.providerAccountId,
             provider: provider.id,
           })
@@ -92,6 +91,7 @@ export default async function callback(params: {
         try {
           const isAllowed = await callbacks.signIn({
             user: userOrProfile,
+            // @ts-expect-error
             account,
             profile: OAuthProfile,
           })
@@ -110,9 +110,11 @@ export default async function callback(params: {
         }
 
         // Sign user in
+        // @ts-expect-error
         const { user, session, isNewUser } = await callbackHandler({
           sessionToken: sessionStore.value,
           profile,
+          // @ts-expect-error
           account,
           options,
         })
@@ -127,10 +129,10 @@ export default async function callback(params: {
           const token = await callbacks.jwt({
             token: defaultToken,
             user,
+            // @ts-expect-error
             account,
             profile: OAuthProfile,
             isNewUser,
-            trigger: isNewUser ? "signUp" : "signIn",
           })
 
           // Encode token
@@ -148,10 +150,10 @@ export default async function callback(params: {
           // Save Session Token in cookie
           cookies.push({
             name: options.cookies.sessionToken.name,
-            value: (session as AdapterSession).sessionToken,
+            value: session.sessionToken,
             options: {
               ...options.cookies.sessionToken.options,
-              expires: (session as AdapterSession).expires,
+              expires: session.expires,
             },
           })
         }
@@ -188,10 +190,7 @@ export default async function callback(params: {
       }
     } catch (error) {
       if ((error as Error).name === "OAuthCallbackError") {
-        logger.error("OAUTH_CALLBACK_ERROR", {
-          error: error as Error,
-          providerId: provider.id,
-        })
+        logger.error("CALLBACK_OAUTH_ERROR", error as Error)
         return { redirect: `${url}/error?error=OAuthCallback`, cookies }
       }
       logger.error("OAUTH_CALLBACK_ERROR", error as Error)
@@ -199,16 +198,14 @@ export default async function callback(params: {
     }
   } else if (provider.type === "email") {
     try {
-      const token = query?.token as string | undefined
-      const identifier = query?.email as string | undefined
+      // Verified in `assertConfig`
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const { useVerificationToken, getUserByEmail } = adapter!
 
-      // If these are missing, the sign-in URL was manually opened without these params or the `sendVerificationRequest` method did not send the link correctly in the email.
-      if (!token || !identifier) {
-        return { redirect: `${url}/error?error=configuration`, cookies }
-      }
+      const token = query?.token
+      const identifier = query?.email
 
-      // @ts-expect-error -- Verified in `assertConfig`. adapter: Adapter<true>
-      const invite = await adapter.useVerificationToken({
+      const invite = await useVerificationToken?.({
         identifier,
         token: hashToken(token, options),
       })
@@ -218,23 +215,29 @@ export default async function callback(params: {
         return { redirect: `${url}/error?error=Verification`, cookies }
       }
 
-      const profile = await getAdapterUserFromEmail({
+      // If it is an existing user, use that, otherwise use a placeholder
+      const profile = (identifier
+        ? await getUserByEmail(identifier)
+        : null) ?? {
         email: identifier,
-        // @ts-expect-error -- Verified in `assertConfig`. adapter: Adapter<true>
-        adapter,
-      })
+      }
 
+      /** @type {import("src").Account} */
       const account = {
         providerAccountId: profile.email,
-        type: "email" as const,
+        type: "email",
         provider: provider.id,
       }
 
       // Check if user is allowed to sign in
       try {
         const signInCallbackResponse = await callbacks.signIn({
+          // @ts-expect-error
           user: profile,
+          // @ts-expect-error
           account,
+          // @ts-expect-error
+          email: { email: identifier },
         })
         if (!signInCallbackResponse) {
           return { redirect: `${url}/error?error=AccessDenied`, cookies }
@@ -251,9 +254,12 @@ export default async function callback(params: {
       }
 
       // Sign user in
+      // @ts-expect-error
       const { user, session, isNewUser } = await callbackHandler({
         sessionToken: sessionStore.value,
+        // @ts-expect-error
         profile,
+        // @ts-expect-error
         account,
         options,
       })
@@ -268,9 +274,9 @@ export default async function callback(params: {
         const token = await callbacks.jwt({
           token: defaultToken,
           user,
+          // @ts-expect-error
           account,
           isNewUser,
-          trigger: isNewUser ? "signUp" : "signIn",
         })
 
         // Encode token
@@ -288,14 +294,15 @@ export default async function callback(params: {
         // Save Session Token in cookie
         cookies.push({
           name: options.cookies.sessionToken.name,
-          value: (session as AdapterSession).sessionToken,
+          value: session.sessionToken,
           options: {
             ...options.cookies.sessionToken.options,
-            expires: (session as AdapterSession).expires,
+            expires: session.expires,
           },
         })
       }
 
+      // @ts-expect-error
       await events.signIn?.({ user, account, isNewUser })
 
       // Handle first logins on new accounts
@@ -322,14 +329,14 @@ export default async function callback(params: {
   } else if (provider.type === "credentials" && method === "POST") {
     const credentials = body
 
-    let user: User | null
+    let user: User
     try {
-      user = await provider.authorize(credentials, {
+      user = (await provider.authorize(credentials, {
         query,
         body,
         headers,
         method,
-      })
+      })) as User
       if (!user) {
         return {
           status: 401,
@@ -342,7 +349,6 @@ export default async function callback(params: {
       }
     } catch (error) {
       return {
-        status: 401,
         redirect: `${url}/error?error=${encodeURIComponent(
           (error as Error).message
         )}`,
@@ -395,7 +401,6 @@ export default async function callback(params: {
       // @ts-expect-error
       account,
       isNewUser: false,
-      trigger: "signIn",
     })
 
     // Encode token

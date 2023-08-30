@@ -2,7 +2,7 @@ import type { OAuthConfig, OAuthUserConfig } from "."
 
 export interface AzureADProfile extends Record<string, any> {
   sub: string
-  nickname: string
+  nicname: string
   email: string
   picture: string
 }
@@ -25,7 +25,7 @@ export default function AzureAD<P extends AzureADProfile>(
     id: "azure-ad",
     name: "Azure Active Directory",
     type: "oauth",
-    wellKnown: `https://login.microsoftonline.com/${tenant}/v2.0/.well-known/openid-configuration?appid=${options.clientId}`,
+    wellKnown: `https://login.microsoftonline.com/${tenant}/v2.0/.well-known/openid-configuration`,
     authorization: {
       params: {
         scope: "openid profile email",
@@ -33,36 +33,32 @@ export default function AzureAD<P extends AzureADProfile>(
     },
     async profile(profile, tokens) {
       // https://docs.microsoft.com/en-us/graph/api/profilephoto-get?view=graph-rest-1.0#examples
-      const response = await fetch(
+      const profilePicture = await fetch(
         `https://graph.microsoft.com/v1.0/me/photos/${profilePhotoSize}x${profilePhotoSize}/$value`,
-        { headers: { Authorization: `Bearer ${tokens.access_token}` } }
+        {
+          headers: {
+            Authorization: `Bearer ${tokens.access_token}`,
+          },
+        }
       )
 
       // Confirm that profile photo was returned
-      let image
-      // TODO: Do this without Buffer
-      if (response.ok && typeof Buffer !== "undefined") {
-        try {
-          const pictureBuffer = await response.arrayBuffer()
-          const pictureBase64 = Buffer.from(pictureBuffer).toString("base64")
-          image = `data:image/jpeg;base64, ${pictureBase64}`
-        } catch {}
+      if (profilePicture.ok) {
+        const pictureBuffer = await profilePicture.arrayBuffer()
+        const pictureBase64 = Buffer.from(pictureBuffer).toString("base64")
+        return {
+          id: profile.sub,
+          name: profile.name,
+          email: profile.email,
+          image: `data:image/jpeg;base64, ${pictureBase64}`,
+        }
+      } else {
+        return {
+          id: profile.sub,
+          name: profile.name,
+          email: profile.email,
+        }
       }
-
-      return {
-        id: profile.sub,
-        name: profile.name,
-        email: profile.email,
-        image: image ?? null,
-      }
-    },
-    style: {
-      logo: "/azure.svg",
-      logoDark: "/azure-dark.svg",
-      bg: "#fff",
-      text: "#0072c6",
-      bgDark: "#0072c6",
-      textDark: "#fff",
     },
     options,
   }

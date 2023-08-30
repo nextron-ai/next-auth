@@ -3,10 +3,10 @@ import userEvent from "@testing-library/user-event"
 import { render, screen, waitFor } from "@testing-library/react"
 import { server, mockProviders } from "./helpers/mocks"
 import { getProviders } from "../../react"
-import logger from "../../utils/logger"
+import logger from "../../lib/logger"
 import { rest } from "msw"
 
-jest.mock("../../utils/logger", () => ({
+jest.mock("../../lib/logger", () => ({
   __esModule: true,
   default: {
     warn: jest.fn(),
@@ -57,7 +57,7 @@ test("when failing to fetch the providers, it'll log the error", async () => {
   await waitFor(() => {
     expect(logger.error).toHaveBeenCalledTimes(1)
     expect(logger.error).toBeCalledWith("CLIENT_FETCH_ERROR", {
-      url: "/api/auth/providers",
+      path: "providers",
       error: new SyntaxError("Unexpected token s in JSON at position 0"),
     })
   })

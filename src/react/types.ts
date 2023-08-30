@@ -25,12 +25,11 @@ export interface ClientSafeProvider {
 
 export interface SignInOptions extends Record<string, unknown> {
   /**
-   * Specify to which URL the user will be redirected after signing in. Defaults to the page URL the sign-in is initiated from.
-   *
-   * [Documentation](https://next-auth.js.org/getting-started/client#specifying-a-callbackurl)
+   * Defaults to the current URL.
+   * @docs https://next-auth.js.org/getting-started/client#specifying-a-callbackurl
    */
   callbackUrl?: string
-  /** [Documentation](https://next-auth.js.org/getting-started/client#using-the-redirect-false-option) */
+  /** @docs https://next-auth.js.org/getting-started/client#using-the-redirect-false-option */
   redirect?: boolean
 }
 
@@ -48,19 +47,19 @@ export type SignInAuthorizationParams =
   | Record<string, string>
   | URLSearchParams
 
-/** [Documentation](https://next-auth.js.org/getting-started/client#using-the-redirect-false-option-1) */
+/** @docs https://next-auth.js.org/getting-started/client#using-the-redirect-false-option-1 */
 export interface SignOutResponse {
   url: string
 }
 
 export interface SignOutParams<R extends boolean = true> {
-  /** [Documentation](https://next-auth.js.org/getting-started/client#specifying-a-callbackurl-1) */
+  /** @docs https://next-auth.js.org/getting-started/client#specifying-a-callbackurl-1 */
   callbackUrl?: string
-  /** [Documentation](https://next-auth.js.org/getting-started/client#using-the-redirect-false-option-1 */
+  /** @docs https://next-auth.js.org/getting-started/client#using-the-redirect-false-option-1 */
   redirect?: R
 }
 
-/** [Documentation](https://next-auth.js.org/getting-started/client#options) */
+/** @docs: https://next-auth.js.org/getting-started/client#options */
 export interface SessionProviderProps {
   children: React.ReactNode
   session?: Session | null
@@ -76,10 +75,4 @@ export interface SessionProviderProps {
    * This option activates this behaviour if set to `true` (default).
    */
   refetchOnWindowFocus?: boolean
-  /**
-   * Set to `false` to stop polling when the device has no internet access offline (determined by `navigator.onLine`)
-   *
-   * [`navigator.onLine` documentation](https://developer.mozilla.org/en-US/docs/Web/API/NavigatorOnLine/onLine)
-   */
-  refetchWhenOffline?: false
 }

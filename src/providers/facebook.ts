@@ -41,14 +41,6 @@ export default function Facebook<P extends FacebookProfile>(
         image: profile.picture.data.url,
       }
     },
-    style: {
-      logo: "/facebook.svg",
-      logoDark: "/facebook-dark.svg",
-      bg: "#fff",
-      text: "#006aff",
-      bgDark: "#006aff",
-      textDark: "#fff",
-    },
     options,
   }
 }

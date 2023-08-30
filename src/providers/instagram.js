@@ -35,9 +35,6 @@ export default function Instagram(options) {
     token: "https://api.instagram.com/oauth/access_token",
     userinfo:
       "https://graph.instagram.com/me?fields=id,username,account_type,name",
-    client: {
-      token_endpoint_auth_method: "client_secret_post",
-    },
     async profile(profile) {
       return {
         id: profile.id,
@@ -45,14 +42,6 @@ export default function Instagram(options) {
         email: null,
         image: null,
       }
-    },
-    style: {
-      logo: "/instagram.svg",
-      logoDark: "/instagram.svg",
-      bg: "#fff",
-      text: "#000",
-      bgDark: "#fff",
-      textDark: "#000",
     },
     options,
   }

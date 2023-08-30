@@ -117,14 +117,6 @@ export default function Apple<P extends AppleProfile>(
       }
     },
     checks: ["pkce"],
-    style: {
-      logo: "/apple.svg",
-      logoDark: "/apple-dark.svg",
-      bg: "#fff",
-      text: "#000",
-      bgDark: "#000",
-      textDark: "#fff",
-    },
     options,
   }
 }

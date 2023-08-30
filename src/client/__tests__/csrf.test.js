@@ -2,11 +2,11 @@ import { useState } from "react"
 import userEvent from "@testing-library/user-event"
 import { render, screen, waitFor } from "@testing-library/react"
 import { server, mockCSRFToken } from "./helpers/mocks"
-import logger from "../../utils/logger"
+import logger from "../../lib/logger"
 import { getCsrfToken } from "../../react"
 import { rest } from "msw"
 
-jest.mock("../../utils/logger", () => ({
+jest.mock("../../lib/logger", () => ({
   __esModule: true,
   default: {
     warn: jest.fn(),
@@ -79,7 +79,7 @@ test("when the fetch fails it'll throw a client fetch error", async () => {
   await waitFor(() => {
     expect(logger.error).toHaveBeenCalledTimes(1)
     expect(logger.error).toBeCalledWith("CLIENT_FETCH_ERROR", {
-      url: "/api/auth/csrf",
+      path: "csrf",
       error: new SyntaxError("Unexpected token s in JSON at position 0"),
     })
   })

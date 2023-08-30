@@ -1,5 +1,5 @@
-import type { InternalProvider, Theme } from "../types"
-import type React from "react"
+import { Theme } from "../.."
+import { InternalProvider } from "../../lib/types"
 
 /**
  * The following errors are passed as error query parameters to the default or overridden sign-in page.
@@ -49,13 +49,6 @@ export default function SigninPage(props: SignInServerPageParams) {
     return false
   })
 
-  if (typeof document !== "undefined" && theme.buttonText) {
-    document.documentElement.style.setProperty(
-      "--button-text-color",
-      theme.buttonText
-    )
-  }
-
   if (typeof document !== "undefined" && theme.brandColor) {
     document.documentElement.style.setProperty(
       "--brand-color",
@@ -81,7 +74,6 @@ export default function SigninPage(props: SignInServerPageParams) {
 
   const error = errorType && (errors[errorType] ?? errors.default)
 
-  const logos = "https://authjs.dev/img/providers"
   return (
     <div className="signin">
       {theme.brandColor && (
@@ -95,19 +87,8 @@ export default function SigninPage(props: SignInServerPageParams) {
           }}
         />
       )}
-      {theme.buttonText && (
-        <style
-          dangerouslySetInnerHTML={{
-            __html: `
-        :root {
-          --button-text-color: ${theme.buttonText}
-        }
-      `,
-          }}
-        />
-      )}
+      {theme.logo && <img src={theme.logo} alt="Logo" className="logo" />}
       <div className="card">
-        {theme.logo && <img src={theme.logo} alt="Logo" className="logo" />}
         {error && (
           <div className="error">
             <p>{error}</p>
@@ -121,42 +102,8 @@ export default function SigninPage(props: SignInServerPageParams) {
                 {callbackUrl && (
                   <input type="hidden" name="callbackUrl" value={callbackUrl} />
                 )}
-                <button
-                  type="submit"
-                  className="button"
-                  style={
-                    // eslint-disable-next-line
-                    {
-                      "--provider-bg": provider.style?.bg ?? "",
-                      "--provider-dark-bg": provider.style?.bgDark ?? "",
-                      "--provider-color": provider.style?.text ?? "",
-                      "--provider-dark-color": provider.style?.textDark ?? "",
-                    } as React.CSSProperties
-                  }
-                >
-                  {provider.style?.logo && (
-                    <img
-                      loading="lazy"
-                      height={24}
-                      width={24}
-                      id="provider-logo"
-                      src={`${
-                        provider.style.logo.startsWith("/") ? logos : ""
-                      }${provider.style.logo}`}
-                    />
-                  )}
-                  {provider.style?.logoDark && (
-                    <img
-                      loading="lazy"
-                      height={24}
-                      width={24}
-                      id="provider-logo-dark"
-                      src={`${
-                        provider.style.logo.startsWith("/") ? logos : ""
-                      }${provider.style.logoDark}`}
-                    />
-                  )}
-                  <span>Sign in with {provider.name}</span>
+                <button type="submit" className="button">
+                  Sign in with {provider.name}
                 </button>
               </form>
             )}
@@ -182,7 +129,7 @@ export default function SigninPage(props: SignInServerPageParams) {
                   placeholder="email@example.com"
                   required
                 />
-                <button id="submitButton" type="submit">Sign in with {provider.name}</button>
+                <button type="submit">Sign in with {provider.name}</button>
               </form>
             )}
             {provider.type === "credentials" && (

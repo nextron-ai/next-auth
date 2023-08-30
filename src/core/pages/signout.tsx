@@ -1,5 +1,5 @@
 import { Theme } from "../.."
-import { InternalUrl } from "../../utils/parse-url"
+import { InternalUrl } from "../../lib/parse-url"
 
 export interface SignoutProps {
   url: InternalUrl
@@ -12,35 +12,22 @@ export default function SignoutPage(props: SignoutProps) {
 
   return (
     <div className="signout">
-      {theme.brandColor && (
-        <style
-          dangerouslySetInnerHTML={{
-            __html: `
+      { theme.brandColor && <style
+        dangerouslySetInnerHTML={{
+          __html: `
         :root {
           --brand-color: ${theme.brandColor}
         }
       `,
-          }}
-        />
-      )}
-      {theme.buttonText && (
-        <style
-          dangerouslySetInnerHTML={{
-            __html: `
-        :root {
-          --button-text-color: ${theme.buttonText}
-        }
-      `,
-          }}
-        />
-      )}
+        }}
+      /> }
+      {theme.logo && <img src={theme.logo} alt="Logo" className="logo" />}
       <div className="card">
-        {theme.logo && <img src={theme.logo} alt="Logo" className="logo" />}
         <h1>Signout</h1>
         <p>Are you sure you want to sign out?</p>
         <form action={`${url}/signout`} method="POST">
           <input type="hidden" name="csrfToken" value={csrfToken} />
-          <button id="submitButton" type="submit">Sign out</button>
+          <button type="submit">Sign out</button>
         </form>
       </div>
     </div>

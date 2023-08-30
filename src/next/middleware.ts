@@ -1,11 +1,11 @@
 import type { NextMiddleware, NextFetchEvent } from "next/server"
-import type { Awaitable, CookieOption, AuthOptions } from ".."
-import type { JWT, JWTOptions } from "../jwt"
+import type { Awaitable, NextAuthOptions } from ".."
+import type { JWT } from "../jwt"
 
 import { NextResponse, NextRequest } from "next/server"
 
 import { getToken } from "../jwt"
-import parseUrl from "../utils/parse-url"
+import parseUrl from "../lib/parse-url"
 
 type AuthorizedCallback = (params: {
   token: JWT | null
@@ -20,37 +20,7 @@ export interface NextAuthMiddlewareOptions {
    * ---
    * [Documentation](https://next-auth.js.org/configuration/pages)
    */
-  pages?: AuthOptions["pages"]
-
-  /**
-   * You can override the default cookie names and options for any of the cookies
-   * by this middleware. Similar to `cookies` in `NextAuth`.
-   *
-   * Useful if the token is stored in not a default cookie.
-   *
-   * ---
-   * [Documentation](https://next-auth.js.org/configuration/options#cookies)
-   *
-   * - ⚠ **This is an advanced option.** Advanced options are passed the same way as basic options,
-   * but **may have complex implications** or side effects.
-   * You should **try to avoid using advanced options** unless you are very comfortable using them.
-   *
-   */
-  cookies?: Partial<
-    Record<
-      keyof Pick<keyof AuthOptions["cookies"], "sessionToken">,
-      Omit<CookieOption, "options">
-    >
-  >
-
-  /**
-   * If a custom jwt `decode` method is set in `[...nextauth].ts`, the same method should be set here also.
-   *
-   * ---
-   * [Documentation](https://next-auth.js.org/configuration/nextjs#custom-jwt-decode-method)
-   */
-  jwt?: Partial<Pick<JWTOptions, "decode">>
-
+  pages?: NextAuthOptions["pages"]
   callbacks?: {
     /**
      * Callback that receives the user's JWT payload
@@ -66,7 +36,7 @@ export interface NextAuthMiddlewareOptions {
      * @example
      *
      * ```js
-     * // `middleware.js`
+     * // `pages/admin/_middleware.js`
      * import { withAuth } from "next-auth/middleware"
      *
      * export default withAuth({
@@ -74,69 +44,44 @@ export interface NextAuthMiddlewareOptions {
      *     authorized: ({ token }) => token?.user.isAdmin
      *   }
      * })
-     *
-     * export const config = { matcher: ["/admin"] }
-     *
      * ```
      *
      * ---
-     * [Documentation](https://next-auth.js.org/configuration/nextjs#middleware) | [`signIn` callback](configuration/callbacks#sign-in-callback)
+     * [Documentation](https://next-auth.js.org/getting-started/nextjs/middleware#api) | [`signIn` callback](configuration/callbacks#sign-in-callback)
      */
     authorized?: AuthorizedCallback
   }
-
-  /**
-   * The same `secret` used in the `NextAuth` configuration.
-   * Defaults to the `NEXTAUTH_SECRET` environment variable.
-   */
-  secret?: string
 }
-
-// TODO: `NextMiddleware` should allow returning `void`
-// Simplify when https://github.com/vercel/next.js/pull/38625 is merged.
-type NextMiddlewareResult = ReturnType<NextMiddleware> | void // eslint-disable-line @typescript-eslint/no-invalid-void-type
 
 async function handleMiddleware(
   req: NextRequest,
   options: NextAuthMiddlewareOptions | undefined,
-  onSuccess?: (token: JWT | null) => Promise<NextMiddlewareResult>
+  onSuccess?: (token: JWT | null) => Promise<any>
 ) {
-  const { pathname, search, origin, basePath } = req.nextUrl
-
   const signInPage = options?.pages?.signIn ?? "/api/auth/signin"
   const errorPage = options?.pages?.error ?? "/api/auth/error"
-  const authPath = parseUrl(process.env.NEXTAUTH_URL).path
-  const publicPaths = ["/_next", "/favicon.ico"]
-
-  // Avoid infinite redirects/invalid response
-  // on paths that never require authentication
+  const basePath = parseUrl(process.env.NEXTAUTH_URL).path
+  // Avoid infinite redirect loop
   if (
-    `${basePath}${pathname}`.startsWith(authPath) ||
-    [signInPage, errorPage].includes(pathname) ||
-    publicPaths.some((p) => pathname.startsWith(p))
+    req.nextUrl.pathname.startsWith(basePath) ||
+    [signInPage, errorPage].includes(req.nextUrl.pathname)
   ) {
     return
   }
 
-  const secret = options?.secret ?? process.env.NEXTAUTH_SECRET
-  if (!secret) {
+  if (!process.env.NEXTAUTH_SECRET) {
     console.error(
       `[next-auth][error][NO_SECRET]`,
       `\nhttps://next-auth.js.org/errors#no_secret`
     )
 
-    const errorUrl = new URL(`${basePath}${errorPage}`, origin)
+    const errorUrl = new URL(errorPage, req.nextUrl.origin)
     errorUrl.searchParams.append("error", "Configuration")
 
     return NextResponse.redirect(errorUrl)
   }
 
-  const token = await getToken({
-    req,
-    decode: options?.jwt?.decode,
-    cookieName: options?.cookies?.sessionToken?.name,
-    secret,
-  })
+  const token = await getToken({ req })
 
   const isAuthorized =
     (await options?.callbacks?.authorized?.({ req, token })) ?? !!token
@@ -145,49 +90,37 @@ async function handleMiddleware(
   if (isAuthorized) return await onSuccess?.(token)
 
   // the user is not logged in, redirect to the sign-in page
-  const signInUrl = new URL(`${basePath}${signInPage}`, origin)
-  signInUrl.searchParams.append(
-    "callbackUrl",
-    `${basePath}${pathname}${search}`
-  )
+  const signInUrl = new URL(signInPage, req.nextUrl.origin)
+  signInUrl.searchParams.append("callbackUrl", req.url)
   return NextResponse.redirect(signInUrl)
 }
 
-export interface NextRequestWithAuth extends NextRequest {
-  nextauth: { token: JWT | null }
-}
-
-export type NextMiddlewareWithAuth = (
-  request: NextRequestWithAuth,
-  event: NextFetchEvent
-) => NextMiddlewareResult | Promise<NextMiddlewareResult>
-
 export type WithAuthArgs =
-  | [NextRequestWithAuth]
-  | [NextRequestWithAuth, NextFetchEvent]
-  | [NextRequestWithAuth, NextAuthMiddlewareOptions]
-  | [NextMiddlewareWithAuth]
-  | [NextMiddlewareWithAuth, NextAuthMiddlewareOptions]
+  | [NextRequest]
+  | [NextRequest, NextFetchEvent]
+  | [NextRequest, NextAuthMiddlewareOptions]
+  | [NextMiddleware]
+  | [NextMiddleware, NextAuthMiddlewareOptions]
   | [NextAuthMiddlewareOptions]
   | []
 
 /**
  * Middleware that checks if the user is authenticated/authorized.
- * If they aren't, they will be redirected to the login page.
+ * If if they aren't, they will be redirected to the login page.
  * Otherwise, continue.
  *
  * @example
  *
  * ```js
- * // `middleware.js`
+ * // `pages/_middleware.js`
  * export { default } from "next-auth/middleware"
  * ```
  *
  * ---
- * [Documentation](https://next-auth.js.org/configuration/nextjs#middleware)
+ * [Documentation](https://next-auth.js.org/getting-started/middleware)
  */
 export function withAuth(...args: WithAuthArgs) {
-  if (!args.length || args[0] instanceof Request) {
+  if (!args.length || args[0] instanceof NextRequest) {
     // @ts-expect-error
     return handleMiddleware(...args)
   }
@@ -195,9 +128,9 @@ export function withAuth(...args: WithAuthArgs) {
   if (typeof args[0] === "function") {
     const middleware = args[0]
     const options = args[1] as NextAuthMiddlewareOptions | undefined
-    return async (...args: Parameters<NextMiddlewareWithAuth>) =>
+    return async (...args: Parameters<NextMiddleware>) =>
       await handleMiddleware(args[0], options, async (token) => {
-        args[0].nextauth = { token }
+        ;(args[0] as any).nextauth = { token }
         return await middleware(...args)
       })
   }

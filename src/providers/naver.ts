@@ -31,7 +31,7 @@ export default function Naver<P extends NaverProfile>(
     profile(profile) {
       return {
         id: profile.response.id,
-        name: profile.response.nickname,
+        name: profile.response.name,
         email: profile.response.email,
         image: profile.response.profile_image,
       }

@@ -1,6 +1,5 @@
 import { createHash, randomBytes } from "crypto"
-
-import type { InternalOptions } from "../types"
+import { InternalOptions } from "../../lib/types"
 
 interface CreateCSRFTokenParams {
   options: InternalOptions

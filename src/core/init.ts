@@ -1,22 +1,20 @@
-import { randomBytes, randomUUID } from "crypto"
-import { AuthOptions } from ".."
-import logger from "../utils/logger"
+import { NextAuthOptions } from ".."
+import logger from "../lib/logger"
+import parseUrl from "../lib/parse-url"
+import { InternalOptions } from "../lib/types"
 import { adapterErrorHandler, eventsErrorHandler } from "./errors"
 import parseProviders from "./lib/providers"
-import { createSecret } from "./lib/utils"
+import createSecret from "./lib/utils"
 import * as cookie from "./lib/cookie"
 import * as jwt from "../jwt"
 import { defaultCallbacks } from "./lib/default-callbacks"
 import { createCSRFToken } from "./lib/csrf-token"
 import { createCallbackUrl } from "./lib/callback-url"
-import { RequestInternal } from "."
-
-import type { InternalOptions } from "./types"
-import parseUrl from "../utils/parse-url"
+import { IncomingRequest } from "."
 
 interface InitParams {
-  origin?: string
-  authOptions: AuthOptions
+  host?: string
+  userOptions: NextAuthOptions
   providerId?: string
   action: InternalOptions["action"]
   /** Callback URL value extracted from the incoming request. */
@@ -25,15 +23,15 @@ interface InitParams {
   csrfToken?: string
   /** Is the incoming request a POST request? */
   isPost: boolean
-  cookies: RequestInternal["cookies"]
+  cookies: IncomingRequest["cookies"]
 }
 
 /** Initialize all internal options and cookies. */
 export async function init({
-  authOptions,
+  userOptions,
   providerId,
   action,
-  origin,
+  host,
   cookies: reqCookies,
   callbackUrl: reqCallbackUrl,
   csrfToken: reqCsrfToken,
@@ -42,12 +40,12 @@ export async function init({
   options: InternalOptions
   cookies: cookie.Cookie[]
 }> {
-  const url = parseUrl(origin)
+  const url = parseUrl(host)
 
-  const secret = createSecret({ authOptions, url })
+  const secret = createSecret({ userOptions, url })
 
   const { providers, provider } = parseProviders({
-    providers: authOptions.providers,
+    providers: userOptions.providers,
     url,
     providerId,
   })
@@ -63,36 +61,30 @@ export async function init({
       colorScheme: "auto",
       logo: "",
       brandColor: "",
-      buttonText: "",
     },
     // Custom options override defaults
-    ...authOptions,
-    // These computed settings can have values in authOptions but we override them
+    ...userOptions,
+    // These computed settings can have values in userOptions but we override them
     // and are request-specific.
     url,
     action,
-    // @ts-expect-errors
     provider,
     cookies: {
       ...cookie.defaultCookies(
-        authOptions.useSecureCookies ?? url.base.startsWith("https://")
+        userOptions.useSecureCookies ?? url.base.startsWith("https://")
       ),
       // Allow user cookie options to override any cookie settings above
-      ...authOptions.cookies,
+      ...userOptions.cookies,
     },
     secret,
     providers,
     // Session options
     session: {
       // If no adapter specified, force use of JSON Web Tokens (stateless)
-      strategy: authOptions.adapter ? "database" : "jwt",
+      strategy: userOptions.adapter ? "database" : "jwt",
       maxAge,
       updateAge: 24 * 60 * 60,
-      generateSessionToken: () => {
-        // Use `randomUUID` if available. (Node 15.6+)
-        return randomUUID?.() ?? randomBytes(32).toString("hex")
-      },
-      ...authOptions.session,
+      ...userOptions.session,
     },
     // JWT options
     jwt: {
@@ -100,13 +92,13 @@ export async function init({
       maxAge, // same as session maxAge,
       encode: jwt.encode,
       decode: jwt.decode,
-      ...authOptions.jwt,
+      ...userOptions.jwt,
     },
     // Event messages
-    events: eventsErrorHandler(authOptions.events ?? {}, logger),
-    adapter: adapterErrorHandler(authOptions.adapter, logger),
+    events: eventsErrorHandler(userOptions.events ?? {}, logger),
+    adapter: adapterErrorHandler(userOptions.adapter, logger),
     // Callback functions
-    callbacks: { ...defaultCallbacks, ...authOptions.callbacks },
+    callbacks: { ...defaultCallbacks, ...userOptions.callbacks },
     logger,
     callbackUrl: url.origin,
   }

@@ -1,7 +1,7 @@
 import type { IncomingMessage } from "http"
 import type { LoggerInstance, Session } from ".."
 
-export interface AuthClientConfig {
+export interface NextAuthClientConfig {
   baseUrl: string
   basePath: string
   baseUrlServer: string
@@ -18,8 +18,8 @@ export interface AuthClientConfig {
 }
 
 export interface CtxOrReq {
-  req?: Partial<IncomingMessage> & { body?: any }
-  ctx?: { req: Partial<IncomingMessage> & { body?: any } }
+  req?: IncomingMessage
+  ctx?: { req: IncomingMessage }
 }
 
 /**
@@ -31,35 +31,29 @@ export interface CtxOrReq {
  */
 export async function fetchData<T = any>(
   path: string,
-  __NEXTAUTH: AuthClientConfig,
+  __NEXTAUTH: NextAuthClientConfig,
   logger: LoggerInstance,
   { ctx, req = ctx?.req }: CtxOrReq = {}
 ): Promise<T | null> {
-  const url = `${apiBaseUrl(__NEXTAUTH)}/${path}`
   try {
-    const options: RequestInit = {
-      headers: {
-        "Content-Type": "application/json",
-        ...(req?.headers?.cookie ? { cookie: req.headers.cookie } : {}),
-      },
-    }
-
-    if (req?.body) {
-      options.body = JSON.stringify(req.body)
-      options.method = "POST"
-    }
-
-    const res = await fetch(url, options)
+    const options = req?.headers.cookie
+      ? { headers: { cookie: req.headers.cookie } }
+      : {}
+    const res = await fetch(`${apiBaseUrl(__NEXTAUTH)}/${path}`, options)
     const data = await res.json()
     if (!res.ok) throw data
     return Object.keys(data).length > 0 ? data : null // Return null if data empty
   } catch (error) {
-    logger.error("CLIENT_FETCH_ERROR", { error: error as Error, url })
+    logger.error("CLIENT_FETCH_ERROR", {
+      error: error as Error,
+      path,
+      ...(req ? { header: req.headers } : {}),
+    })
     return null
   }
 }
 
-export function apiBaseUrl(__NEXTAUTH: AuthClientConfig) {
+export function apiBaseUrl(__NEXTAUTH: NextAuthClientConfig) {
   if (typeof window === "undefined") {
     // Return absolute path when called server side
     return `${__NEXTAUTH.baseUrlServer}${__NEXTAUTH.basePathServer}`
@@ -103,18 +97,10 @@ export function BroadcastChannel(name = "nextauth.message") {
     /** Notify other tabs/windows. */
     post(message: Record<string, unknown>) {
       if (typeof window === "undefined") return
-      try {
-        localStorage.setItem(
-          name,
-          JSON.stringify({ ...message, timestamp: now() })
-        )
-      } catch {
-        /**
-         * The localStorage API isn't always available.
-         * It won't work in private mode prior to Safari 11 for example.
-         * Notifications are simply dropped if an error is encountered.
-         */
-      }
+      localStorage.setItem(
+        name,
+        JSON.stringify({ ...message, timestamp: now() })
+      )
     },
   }
 }

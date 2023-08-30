@@ -1,25 +1,24 @@
-import logger, { setLogger } from "../utils/logger"
-import { detectOrigin } from "../utils/detect-origin"
+import logger, { setLogger } from "../lib/logger"
 import * as routes from "./routes"
 import renderPage from "./pages"
 import { init } from "./init"
 import { assertConfig } from "./lib/assert"
 import { SessionStore } from "./lib/cookie"
 
-import type { AuthAction, AuthOptions } from "./types"
+import type { NextAuthOptions } from "./types"
+import type { NextAuthAction } from "../lib/types"
 import type { Cookie } from "./lib/cookie"
 import type { ErrorType } from "./pages/error"
-import { parse as parseCookie } from "cookie"
 
-export interface RequestInternal {
+export interface IncomingRequest {
   /** @default "http://localhost:3000" */
-  origin?: string
+  host?: string
   method?: string
-  cookies?: Partial<Record<string, string>>
+  cookies?: Record<string, string>
   headers?: Record<string, any>
   query?: Record<string, any>
   body?: Record<string, any>
-  action: AuthAction
+  action: NextAuthAction
   providerId?: string
   error?: string
 }
@@ -29,7 +28,7 @@ export interface NextAuthHeader {
   value: string
 }
 
-export interface ResponseInternal<
+export interface OutgoingResponse<
   Body extends string | Record<string, any> | any[] = any
 > {
   status?: number
@@ -40,107 +39,41 @@ export interface ResponseInternal<
 }
 
 export interface NextAuthHandlerParams {
-  req: Request | RequestInternal
-  options: AuthOptions
+  req: IncomingRequest
+  options: NextAuthOptions
 }
 
-async function getBody(req: Request): Promise<Record<string, any> | undefined> {
-  try {
-    return await req.json()
-  } catch {}
-}
-
-// TODO:
-async function toInternalRequest(
-  req: RequestInternal | Request
-): Promise<RequestInternal> {
-  if (req instanceof Request) {
-    const url = new URL(req.url)
-    // TODO: handle custom paths?
-    const nextauth = url.pathname.split("/").slice(3)
-    const headers = Object.fromEntries(req.headers)
-    const query: Record<string, any> = Object.fromEntries(url.searchParams)
-    query.nextauth = nextauth
-
-    return {
-      action: nextauth[0] as AuthAction,
-      method: req.method,
-      headers,
-      body: await getBody(req),
-      cookies: parseCookie(req.headers.get("cookie") ?? ""),
-      providerId: nextauth[1],
-      error: url.searchParams.get("error") ?? nextauth[1],
-      origin: detectOrigin(
-        headers["x-forwarded-host"] ?? headers.host,
-        headers["x-forwarded-proto"]
-      ),
-      query,
-    }
-  }
-
-  const { headers } = req
-  const host = headers?.["x-forwarded-host"] ?? headers?.host
-  req.origin = detectOrigin(host, headers?.["x-forwarded-proto"])
-
-  return req
-}
-
-export async function AuthHandler<
+export async function NextAuthHandler<
   Body extends string | Record<string, any> | any[]
->(params: NextAuthHandlerParams): Promise<ResponseInternal<Body>> {
-  const { options: authOptions, req: incomingRequest } = params
+>(params: NextAuthHandlerParams): Promise<OutgoingResponse<Body>> {
+  const { options: userOptions, req } = params
 
-  const req = await toInternalRequest(incomingRequest)
+  setLogger(userOptions.logger, userOptions.debug)
 
-  setLogger(authOptions.logger, authOptions.debug)
+  const assertionResult = assertConfig(params)
 
-  const assertionResult = assertConfig({ options: authOptions, req })
-
-  if (Array.isArray(assertionResult)) {
-    assertionResult.forEach(logger.warn)
+  if (typeof assertionResult === "string") {
+    logger.warn(assertionResult)
   } else if (assertionResult instanceof Error) {
     // Bail out early if there's an error in the user config
+    const { pages, theme } = userOptions
     logger.error(assertionResult.code, assertionResult)
-
-    const htmlPages = ["signin", "signout", "error", "verify-request"]
-    if (!htmlPages.includes(req.action) || req.method !== "GET") {
-      const message = `There is a problem with the server configuration. Check the server logs for more information.`
+    if (pages?.error) {
       return {
-        status: 500,
-        headers: [{ key: "Content-Type", value: "application/json" }],
-        body: { message } as any,
+        redirect: `${pages.error}?error=Configuration`,
       }
     }
-    const { pages, theme } = authOptions
-
-    const authOnErrorPage =
-      pages?.error && req.query?.callbackUrl?.startsWith(pages.error)
-
-    if (!pages?.error || authOnErrorPage) {
-      if (authOnErrorPage) {
-        logger.error(
-          "AUTH_ON_ERROR_PAGE_ERROR",
-          new Error(
-            `The error page ${pages?.error} should not require authentication`
-          )
-        )
-      }
-      const render = renderPage({ theme })
-      return render.error({ error: "configuration" })
-    }
-
-    return {
-      redirect: `${pages.error}?error=Configuration`,
-    }
+    const render = renderPage({ theme })
+    return render.error({ error: "configuration" })
   }
 
   const { action, providerId, error, method = "GET" } = req
 
   const { options, cookies } = await init({
-    authOptions,
+    userOptions,
     action,
     providerId,
-    origin: req.origin,
+    host: req.host,
     callbackUrl: req.body?.callbackUrl ?? req.query?.callbackUrl,
     csrfToken: req.body?.csrfToken,
     cookies: req.cookies,
@@ -175,8 +108,7 @@ export async function AuthHandler<
           let signinUrl = `${pages.signIn}${
             pages.signIn.includes("?") ? "&" : "?"
           }callbackUrl=${encodeURIComponent(options.callbackUrl)}`
-          if (error)
-            signinUrl = `${signinUrl}&error=${encodeURIComponent(error)}`
+          if (error) signinUrl = `${signinUrl}&error=${encodeURIComponent(error)}`
           return { redirect: signinUrl, cookies }
         }
 
@@ -239,7 +171,7 @@ export async function AuthHandler<
   } else if (method === "POST") {
     switch (action) {
       case "signin":
-        // Verified CSRF Token required for all sign-in routes
+        // Verified CSRF Token required for all sign in routes
         if (options.csrfTokenVerified && options.provider) {
           const signin = await routes.signin({
             query: req.query,
@@ -282,8 +214,8 @@ export async function AuthHandler<
           return { ...callback, cookies }
         }
         break
-      case "_log": {
-        if (authOptions.logger) {
+      case "_log":
+        if (userOptions.logger) {
           try {
             const { code, level, ...metadata } = req.body ?? {}
             logger[level](code, metadata)
@@ -293,24 +225,6 @@ export async function AuthHandler<
           }
         }
         return {}
-      }
-      case "session": {
-        // Verified CSRF Token required for session updates
-        if (options.csrfTokenVerified) {
-          const session = await routes.session({
-            options,
-            sessionStore,
-            newSession: req.body?.data,
-            isUpdate: true,
-          })
-          if (session.cookies) cookies.push(...session.cookies)
-          return { ...session, cookies } as any
-        }
-
-        // If CSRF token is invalid, return a 400 status code
-        // we should not redirect to a page as this is an API route
-        return { status: 400, body: {} as any, cookies }
-      }
       default:
     }
   }

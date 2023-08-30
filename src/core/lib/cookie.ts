@@ -1,7 +1,6 @@
+import type { IncomingHttpHeaders } from "http"
 import type { CookiesOptions } from "../.."
 import type { CookieOption, LoggerInstance, SessionStrategy } from "../types"
-import type { NextRequest } from "next/server"
-import type { NextApiRequest } from "next"
 
 // Uncomment to recalculate the estimated size
 // of an empty session cookie
@@ -69,7 +68,6 @@ export function defaultCookies(useSecureCookies: boolean): CookiesOptions {
     callbackUrl: {
       name: `${cookiePrefix}next-auth.callback-url`,
       options: {
-        httpOnly: true,
         sameSite: "lax",
         path: "/",
         secure: useSecureCookies,
@@ -93,7 +91,6 @@ export function defaultCookies(useSecureCookies: boolean): CookiesOptions {
         sameSite: "lax",
         path: "/",
         secure: useSecureCookies,
-        maxAge: 60 * 15, // 15 minutes in seconds
       },
     },
     state: {
@@ -103,18 +100,8 @@ export function defaultCookies(useSecureCookies: boolean): CookiesOptions {
         sameSite: "lax",
         path: "/",
         secure: useSecureCookies,
-        maxAge: 60 * 15, // 15 minutes in seconds
       },
     },
-    nonce: {
-      name: `${cookiePrefix}next-auth.nonce`,
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: useSecureCookies,
-      },
-    }
   }
 }
 
@@ -131,32 +118,20 @@ export class SessionStore {
 
   constructor(
     option: CookieOption,
-    req: Partial<{
-      cookies: NextRequest["cookies"] | NextApiRequest["cookies"]
-      headers: NextRequest["headers"] | NextApiRequest["headers"]
-    }>,
+    req: {
+      cookies?: Record<string, string>
+      headers?: Headers | IncomingHttpHeaders | Record<string, string>
+    },
     logger: LoggerInstance | Console
   ) {
     this.#logger = logger
     this.#option = option
 
-    const { cookies } = req
-    const { name: cookieName } = option
+    if (!req) return
 
-    if (typeof cookies?.getAll === "function") {
-      // Next.js ^v13.0.1 (Edge Env)
-      for (const { name, value } of cookies.getAll()) {
-        if (name.startsWith(cookieName)) {
-          this.#chunks[name] = value
-        }
-      }
-    } else if (cookies instanceof Map) {
-      for (const name of cookies.keys()) {
-        if (name.startsWith(cookieName)) this.#chunks[name] = cookies.get(name)
-      }
-    } else {
-      for (const name in cookies) {
-        if (name.startsWith(cookieName)) this.#chunks[name] = cookies[name]
+    for (const name in req.cookies) {
+      if (name.startsWith(option.name)) {
+        this.#chunks[name] = req.cookies[name]
       }
     }
   }

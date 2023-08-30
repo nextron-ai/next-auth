@@ -1,4 +1,5 @@
 import type { EventCallbacks, LoggerInstance } from ".."
+import type { Adapter } from "../adapters"
 
 /**
  * Same as the default `Error`, but it is JSON serializable.
@@ -57,19 +58,9 @@ export class MissingAdapter extends UnknownError {
   code = "EMAIL_REQUIRES_ADAPTER_ERROR"
 }
 
-export class MissingAdapterMethods extends UnknownError {
-  name = "MissingAdapterMethodsError"
-  code = "MISSING_ADAPTER_METHODS_ERROR"
-}
-
 export class UnsupportedStrategy extends UnknownError {
   name = "UnsupportedStrategyError"
   code = "CALLBACK_CREDENTIALS_JWT_ERROR"
-}
-
-export class InvalidCallbackUrl extends UnknownError {
-  name = "InvalidCallbackUrl"
-  code = "INVALID_CALLBACK_URL_ERROR"
 }
 
 type Method = (...args: any[]) => Promise<any>
@@ -103,10 +94,10 @@ export function eventsErrorHandler(
 }
 
 /** Handles adapter induced errors. */
-export function adapterErrorHandler<TAdapter>(
-  adapter: TAdapter | undefined,
+export function adapterErrorHandler(
+  adapter: Adapter | undefined,
   logger: LoggerInstance
-): TAdapter | undefined {
+): Adapter | undefined {
   if (!adapter) return
 
   return Object.keys(adapter).reduce<any>((acc, name) => {

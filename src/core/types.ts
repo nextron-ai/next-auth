@@ -1,23 +1,9 @@
-import type { Adapter, AdapterUser } from "../adapters"
-import type {
-  Provider,
-  CredentialInput,
-  ProviderType,
-  EmailConfig,
-  CredentialsConfig,
-  OAuthConfig,
-  AuthorizationEndpointHandler,
-  TokenEndpointHandler,
-  UserinfoEndpointHandler,
-} from "../providers"
+import type { Adapter } from "../adapters"
+import type { Provider, CredentialInput, ProviderType } from "../providers"
 import type { TokenSetParameters } from "openid-client"
 import type { JWT, JWTOptions } from "../jwt"
-import type { LoggerInstance } from "../utils/logger"
+import type { LoggerInstance } from "../lib/logger"
 import type { CookieSerializeOptions } from "cookie"
-
-import type { NextApiRequest, NextApiResponse } from "next"
-
-import type { InternalUrl } from "../utils/parse-url"
 
 export type Awaitable<T> = T | PromiseLike<T>
 
@@ -28,7 +14,7 @@ export type { LoggerInstance }
  *
  * [Documentation](https://next-auth.js.org/configuration/options#options)
  */
-export interface AuthOptions {
+export interface NextAuthOptions {
   /**
    * An array of authentication providers for signing in
    * (e.g. Google, Facebook, Twitter, GitHub, Email, etc) in any order.
@@ -41,10 +27,10 @@ export interface AuthOptions {
   providers: Provider[]
   /**
    * A random string used to hash tokens, sign cookies and generate cryptographic keys.
-   * If not specified, it falls back to `jwt.secret` or `NEXTAUTH_SECRET` from environment variables.
-   * Otherwise, it will use a hash of all configuration options, including Client ID / Secrets for entropy.
+   * If not specified, it falls back to `jwt.secret` or `NEXTAUTH_SECRET` from environment vairables.
+   * Otherwise it will use a hash of all configuration options, including Client ID / Secrets for entropy.
    *
-   * NOTE: The last behavior is extremely volatile, and will throw an error in production.
+   * NOTE: The last behavior is extrmely volatile, and will throw an error in production.
    * * **Default value**: `string` (SHA hash of the "options" object)
    * * **Required**: No - **but strongly recommended**!
    *
@@ -61,8 +47,10 @@ export interface AuthOptions {
    */
   session?: Partial<SessionOptions>
   /**
-   * JSON Web Tokens are enabled by default if you have not specified an adapter.
-   * JSON Web Tokens are encrypted (JWE) by default. We recommend you keep this behaviour.
+   * JSON Web Tokens are enabled by default if you have not specified a database.
+   * By default JSON Web Tokens are signed (JWS) but not encrypted (JWE),
+   * as JWT encryption adds additional overhead and comes with some caveats.
+   * You can enable encryption by setting `encryption: true`.
    * * **Default value**: See the documentation page
    * * **Required**: *No*
    *
@@ -118,7 +106,7 @@ export interface AuthOptions {
    * * **Required**: *No*
    *
    * [Documentation](https://next-auth.js.org/configuration/options#adapter) |
-   * [Adapters Overview](https://next-auth.js.org/adapters/overview)
+   * [Community adapters](https://github.com/nextauthjs/adapters)
    */
   adapter?: Adapter
   /**
@@ -215,10 +203,9 @@ export interface AuthOptions {
  * [Pages](https://next-auth.js.org/configuration/pages)
  */
 export interface Theme {
-  colorScheme?: "auto" | "dark" | "light"
+  colorScheme: "auto" | "dark" | "light"
   logo?: string
   brandColor?: string
-  buttonText?: string
 }
 
 /**
@@ -232,7 +219,7 @@ export type TokenSet = TokenSetParameters
  * Usually contains information about the provider being used
  * and also extends `TokenSet`, which is different tokens returned by OAuth Providers.
  */
-export interface Account extends Partial<TokenSet> {
+export interface DefaultAccount extends Partial<TokenSet> {
   /**
    * This value depends on the type of the provider being used to create the account.
    * - oauth: The OAuth account's id, returned from the `profile()` callback.
@@ -241,23 +228,30 @@ export interface Account extends Partial<TokenSet> {
    */
   providerAccountId: string
   /** id of the user this account belongs to. */
-  userId?: string
+  userId: string
   /** id of the provider used for this account */
   provider: string
   /** Provider's type for this account */
   type: ProviderType
 }
 
-/** The OAuth profile returned from your provider */
-export interface Profile {
+export interface Account extends Record<string, unknown>, DefaultAccount {}
+
+export interface DefaultProfile {
   sub?: string
   name?: string
   email?: string
   image?: string
 }
 
+/** The OAuth profile returned from your provider */
+export interface Profile extends Record<string, unknown>, DefaultProfile {}
+
 /** [Documentation](https://next-auth.js.org/configuration/callbacks) */
-export interface CallbacksOptions<P = Profile, A = Account> {
+export interface CallbacksOptions<
+  P extends Record<string, unknown> = Profile,
+  A extends Record<string, unknown> = Account
+> {
   /**
    * Use this callback to control if a user is allowed to sign in.
    * Returning true will continue the sign-in flow.
@@ -266,13 +260,13 @@ export interface CallbacksOptions<P = Profile, A = Account> {
    * [Documentation](https://next-auth.js.org/configuration/callbacks#sign-in-callback)
    */
   signIn: (params: {
-    user: User | AdapterUser
-    account: A | null
+    user: User
+    account: A
     /**
      * If OAuth provider is used, it contains the full
      * OAuth profile returned by your provider.
      */
-    profile?: P
+    profile: P & Record<string, unknown>
     /**
      * If Email provider is used, on the first call, it contains a
      * `verificationRequest: true` property to indicate it is being triggered in the verification request flow.
@@ -281,7 +275,7 @@ export interface CallbacksOptions<P = Profile, A = Account> {
      * to avoid sending emails to addresses or domains on a blocklist or to only explicitly generate them
      * for email address in an allow list.
      */
-    email?: {
+    email: {
       verificationRequest?: boolean
     }
     /** If Credentials provider is used, it contains the user credentials */
@@ -308,7 +302,7 @@ export interface CallbacksOptions<P = Profile, A = Account> {
    * of the token is returned for increased security.
    *
    * If you want to make something available you added to the token through the `jwt` callback,
-   * you have to explicitly forward it here to make it available to the client.
+   * you have to explicitely forward it here to make it available to the client.
    *
    * [Documentation](https://next-auth.js.org/configuration/callbacks#session-callback) |
    * [`jwt` callback](https://next-auth.js.org/configuration/callbacks#jwt-callback) |
@@ -316,25 +310,11 @@ export interface CallbacksOptions<P = Profile, A = Account> {
    * [`getSession`](https://next-auth.js.org/getting-started/client#getsession) |
    *
    */
-  session: (
-    params:
-      | {
-          session: Session
-          /** Available when {@link SessionOptions.strategy} is set to `"jwt"` */
-          token: JWT
-          /** Available when {@link SessionOptions.strategy} is set to `"database"`. */
-          user: AdapterUser
-        } & {
-          /**
-           * Available when using {@link SessionOptions.strategy} `"database"`, this is the data
-           * sent from the client via the [`useSession().update`](https://next-auth.js.org/getting-started/client#update-session) method.
-           *
-           * ⚠ Note, you should validate this data before using it.
-           */
-          newSession: any
-          trigger: "update"
-        }
-  ) => Awaitable<Session | DefaultSession>
+  session: (params: {
+    session: Session
+    user: User
+    token: JWT
+  }) => Awaitable<Session>
   /**
    * This callback is called whenever a JSON Web Token is created (i.e. at sign in)
    * or updated (i.e whenever a session is accessed in the client).
@@ -342,61 +322,18 @@ export interface CallbacksOptions<P = Profile, A = Account> {
    * where you can control what should be returned to the client.
    * Anything else will be kept from your front-end.
    *
-   * The JWT is encrypted by default.
+   * ⚠ By default the JWT is signed, but not encrypted.
    *
    * [Documentation](https://next-auth.js.org/configuration/callbacks#jwt-callback) |
    * [`session` callback](https://next-auth.js.org/configuration/callbacks#session-callback)
    */
-  jwt: (
-    // TODO: remove in `@auth/core` in favor of `trigger: "signUp"`
-    params: {
-      /**
-       * When `trigger` is `"signIn"` or `"signUp"`, it will be a subset of {@link JWT},
-       * `name`, `email` and `picture` will be included.
-       *
-       * Otherwise, it will be the full {@link JWT} for subsequent calls.
-       */
-      token: JWT
-      /**
-       * Either the result of the {@link OAuthConfig.profile} or the {@link CredentialsConfig.authorize} callback.
-       * @note available when `trigger` is `"signIn"` or `"signUp"`.
-       *
-       * Resources:
-       * - [Credentials Provider](https://next-auth.js.org/providers/credentials)
-       * - [User database model](https://authjs.dev/reference/adapters#user)
-       */
-      user: User | AdapterUser
-      /**
-       * Contains information about the provider that was used to sign in.
-       * Also includes {@link TokenSet}
-       * @note available when `trigger` is `"signIn"` or `"signUp"`
-       */
-      account: A | null
-      /**
-       * The OAuth profile returned from your provider.
-       * (In case of OIDC it will be the decoded ID Token or /userinfo response)
-       * @note available when `trigger` is `"signIn"`.
-       */
-      profile?: P
-      /**
-       * Check why was the jwt callback invoked. Possible reasons are:
-       * - user sign-in: First time the callback is invoked, `user`, `profile` and `account` will be present.
-       * - user sign-up: a user is created for the first time in the database (when {@link SessionOptions.strategy} is set to `"database"`})
-       * - update event: Triggered by the [`useSession().update`](https://next-auth.js.org/getting-started/client#update-session) method.
-       * In case of the latter, `trigger` will be `undefined`.
-       */
-      trigger?: "signIn" | "signUp" | "update"
-      /** @deprecated use `trigger === "signUp"` instead */
-      isNewUser?: boolean
-      /**
-       * When using {@link SessionOptions.strategy} `"jwt"`, this is the data
-       * sent from the client via the [`useSession().update`](https://next-auth.js.org/getting-started/client#update-session) method.
-       *
-       * ⚠ Note, you should validate this data before using it.
-       */
-      session?: any
-    }
-  ) => Awaitable<JWT>
+  jwt: (params: {
+    token: JWT
+    user?: User
+    account?: A
+    profile?: P
+    isNewUser?: boolean
+  }) => Awaitable<JWT>
 }
 
 /** [Documentation](https://next-auth.js.org/configuration/options#cookies) */
@@ -412,7 +349,6 @@ export interface CookiesOptions {
   csrfToken: CookieOption
   pkceCodeVerifier: CookieOption
   state: CookieOption
-  nonce: CookieOption
 }
 
 /**
@@ -429,7 +365,7 @@ export interface EventCallbacks {
    */
   signIn: (message: {
     user: User
-    account: Account | null
+    account: Account
     profile?: Profile
     isNewUser?: boolean
   }) => Awaitable<void>
@@ -442,11 +378,7 @@ export interface EventCallbacks {
   signOut: (message: { session: Session; token: JWT }) => Awaitable<void>
   createUser: (message: { user: User }) => Awaitable<void>
   updateUser: (message: { user: User }) => Awaitable<void>
-  linkAccount: (message: {
-    user: User | AdapterUser
-    account: Account
-    profile: User | AdapterUser
-  }) => Awaitable<void>
+  linkAccount: (message: { user: User; account: Account }) => Awaitable<void>
   /**
    * The message object will contain one of these depending on
    * if you use JWT or database persisted sessions:
@@ -471,7 +403,7 @@ export interface PagesOptions {
 
 export type ISODateString = string
 
-export interface DefaultSession {
+export interface DefaultSession extends Record<string, unknown> {
   user?: {
     name?: string | null
     email?: string | null
@@ -489,7 +421,7 @@ export interface DefaultSession {
  * [`SessionProvider`](https://next-auth.js.org/getting-started/client#sessionprovider) |
  * [`session` callback](https://next-auth.js.org/configuration/callbacks#jwt-callback)
  */
-export interface Session extends DefaultSession {}
+export interface Session extends Record<string, unknown>, DefaultSession {}
 
 export type SessionStrategy = "jwt" | "database"
 
@@ -519,13 +451,6 @@ export interface SessionOptions {
    * @default 86400 // 1 day
    */
   updateAge: number
-  /**
-   * Generate a custom session token for database-based sessions.
-   * By default, a random UUID or string is generated depending on the Node.js version.
-   * However, you can specify your own custom string (such as CUID) to be used.
-   * @default `randomUUID` or `randomBytes.toHex` depending on the Node.js version
-   */
-  generateSessionToken: () => Awaitable<string>
 }
 
 export interface DefaultUser {
@@ -545,83 +470,4 @@ export interface DefaultUser {
  * [`jwt` callback](https://next-auth.js.org/configuration/callbacks#jwt-callback) |
  * [`profile` OAuth provider callback](https://next-auth.js.org/configuration/providers#using-a-custom-provider)
  */
-export interface User extends DefaultUser {}
-
-// Below are types that are only supposed be used by next-auth internally
-
-/** @internal */
-export interface OAuthConfigInternal<P>
-  extends Omit<OAuthConfig<P>, "authorization" | "token" | "userinfo"> {
-  authorization?: AuthorizationEndpointHandler
-  token?: TokenEndpointHandler
-  userinfo?: UserinfoEndpointHandler
-}
-
-/** @internal */
-export type InternalProvider<T = ProviderType> = (T extends "oauth"
-  ? OAuthConfigInternal<any>
-  : T extends "email"
-  ? EmailConfig
-  : T extends "credentials"
-  ? CredentialsConfig
-  : never) & {
-  signinUrl: string
-  callbackUrl: string
-}
-
-export type AuthAction =
-  | "providers"
-  | "session"
-  | "csrf"
-  | "signin"
-  | "signout"
-  | "callback"
-  | "verify-request"
-  | "error"
-  | "_log"
-
-/** @internal */
-export interface InternalOptions<
-  TProviderType = ProviderType,
-  WithVerificationToken = TProviderType extends "email" ? true : false
-> {
-  providers: InternalProvider[]
-  /**
-   * Parsed from `NEXTAUTH_URL` or `x-forwarded-host` and `x-forwarded-proto` if the host is trusted.
-   * @default "http://localhost:3000/api/auth"
-   */
-  url: InternalUrl
-  action: AuthAction
-  provider: InternalProvider<TProviderType>
-  csrfToken?: string
-  csrfTokenVerified?: boolean
-  secret: string
-  theme: Theme
-  debug: boolean
-  logger: LoggerInstance
-  session: Required<SessionOptions>
-  pages: Partial<PagesOptions>
-  jwt: JWTOptions
-  events: Partial<EventCallbacks>
-  adapter: WithVerificationToken extends true
-    ? Adapter<WithVerificationToken>
-    : Adapter<WithVerificationToken> | undefined
-  callbacks: CallbacksOptions
-  cookies: CookiesOptions
-  callbackUrl: string
-}
-
-/** @internal */
-export interface NextAuthRequest extends NextApiRequest {
-  options: InternalOptions
-}
-
-/** @internal */
-export type NextAuthResponse<T = any> = NextApiResponse<T>
-
-/** @internal */
-// eslint-disable-next-line @typescript-eslint/no-invalid-void-type
-export type NextAuthApiHandler<Result = void, Response = any> = (
-  req: NextAuthRequest,
-  res: NextAuthResponse<Response>
-) => Awaitable<Result>
+export interface User extends Record<string, unknown>, DefaultUser {}

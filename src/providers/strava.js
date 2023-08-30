@@ -1,15 +1,5 @@
-import type { OAuthConfig, OAuthUserConfig } from "."
-
-export interface StravaProfile extends Record<string, any> {
-  id: string // this is really a number
-  firstname: string
-  lastname: string
-  profile: string
-}
-
-export default function Strava<P extends StravaProfile>(
-  options: OAuthUserConfig<P>
-): OAuthConfig<P> {
+/** @type {import(".").OAuthProvider} */
+export default function Strava(options) {
   return {
     id: "strava",
     name: "Strava",
@@ -20,6 +10,7 @@ export default function Strava<P extends StravaProfile>(
         scope: "read",
         approval_prompt: "auto",
         response_type: "code",
+        redirect_uri: "http://localhost:3000/api/auth/callback/strava",
       },
     },
     token: {
@@ -29,10 +20,11 @@ export default function Strava<P extends StravaProfile>(
     client: {
       token_endpoint_auth_method: "client_secret_post",
     },
+
     profile(profile) {
       return {
         id: profile.id,
-        name: `${profile.firstname} ${profile.lastname}`,
+        name: profile.firstname,
         email: null,
         image: profile.profile,
       }

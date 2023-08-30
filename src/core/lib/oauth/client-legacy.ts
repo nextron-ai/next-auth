@@ -2,7 +2,7 @@
 // We have the intentions to provide only minor fixes for this in the future.
 
 import { OAuth } from "oauth"
-import type { InternalOptions } from "../../types"
+import { InternalOptions } from "src/lib/types"
 
 /**
  * Client supporting OAuth 1.x
@@ -69,5 +69,3 @@ export function oAuth1Client(options: InternalOptions<"oauth">) {
   }
   return oauth1Client
 }
-
-export const oAuth1TokenStore = new Map()
