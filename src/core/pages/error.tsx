@@ -1,5 +1,5 @@
 import { Theme } from "../.."
-import { InternalUrl } from "../../lib/parse-url"
+import { InternalUrl } from "../../utils/parse-url"
 
 /**
  * The following errors are passed as error query parameters to the default or overridden error page.
@@ -102,8 +102,8 @@ export default function ErrorPage(props: ErrorProps) {
             }}
           />
         )}
-        {theme?.logo && <img src={theme.logo} alt="Logo" className="logo" />}
         <div className="card">
+          {theme?.logo && <img src={theme.logo} alt="Logo" className="logo" />}
           <h1>{heading}</h1>
           <div className="message">{message}</div>
           {signin}

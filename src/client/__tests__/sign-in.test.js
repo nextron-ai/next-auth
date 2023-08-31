@@ -1,7 +1,7 @@
 import { useState } from "react"
 import userEvent from "@testing-library/user-event"
 import { render, screen, waitFor } from "@testing-library/react"
-import logger from "../../lib/logger"
+import logger from "../../utils/logger"
 import {
   server,
   mockCredentialsResponse,
@@ -13,7 +13,7 @@ import { rest } from "msw"
 
 const { location } = window
 
-jest.mock("../../lib/logger", () => ({
+jest.mock("../../utils/logger", () => ({
   __esModule: true,
   default: {
     warn: jest.fn(),
@@ -256,7 +256,7 @@ test("when it fails to fetch the providers, it redirected back to signin page", 
     expect(logger.error).toHaveBeenCalledTimes(1)
     expect(logger.error).toBeCalledWith("CLIENT_FETCH_ERROR", {
       error: "Error when retrieving providers",
-      path: "providers",
+      url: "/api/auth/providers",
     })
   })
 })

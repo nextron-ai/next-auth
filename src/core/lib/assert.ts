@@ -4,10 +4,15 @@ import {
   MissingAuthorize,
   MissingSecret,
   UnsupportedStrategy,
+  InvalidCallbackUrl,
+  MissingAdapterMethods,
 } from "../errors"
+import parseUrl from "../../utils/parse-url"
+import { defaultCookies } from "./cookie"
 
-import type { NextAuthHandlerParams } from ".."
-import type { WarningCode } from "../../lib/logger"
+import type { RequestInternal } from ".."
+import type { WarningCode } from "../../utils/logger"
+import type { AuthOptions } from "../types"
 
 type ConfigError =
   | MissingAPIRoute
@@ -16,7 +21,17 @@ type ConfigError =
   | MissingAuthorize
   | MissingAdapter
 
-let twitterWarned = false
+let warned = false
+
+function isValidHttpUrl(url: string, baseUrl: string) {
+  try {
+    return /^https?:/.test(
+      new URL(url, url.startsWith("/") ? baseUrl : undefined).protocol
+    )
+  } catch {
+    return false
+  }
+}
 
 /**
  * Verify that the user configured `next-auth` correctly.
@@ -24,10 +39,27 @@ let twitterWarned = false
  *
  * REVIEW: Make some of these and corresponding docs less Next.js specific?
  */
-export function assertConfig(
-  params: NextAuthHandlerParams
-): ConfigError | WarningCode | undefined {
+export function assertConfig(params: {
+  options: AuthOptions
+  req: RequestInternal
+}): ConfigError | WarningCode[] {
   const { options, req } = params
+
+  const warnings: WarningCode[] = []
+
+  if (!warned) {
+    if (!req.origin) warnings.push("NEXTAUTH_URL")
+
+    // TODO: Make this throw an error in next major. This will also get rid of `NODE_ENV`
+    if (!options.secret && process.env.NODE_ENV !== "production")
+      warnings.push("NO_SECRET")
+
+    if (options.debug) warnings.push("DEBUG_ENABLED")
+  }
+
+  if (!options.secret && process.env.NODE_ENV === "production") {
+    return new MissingSecret("Please define a `secret` in production.")
+  }
 
   // req.query isn't defined when asserting `getServerSession` for example
   if (!req.query?.nextauth && !req.action) {
@@ -36,15 +68,27 @@ export function assertConfig(
     )
   }
 
-  if (!options.secret) {
-    if (process.env.NODE_ENV === "production") {
-      return new MissingSecret("Please define a `secret` in production.")
-    } else {
-      return "NO_SECRET"
-    }
+  const callbackUrlParam = req.query?.callbackUrl as string | undefined
+
+  const url = parseUrl(req.origin)
+
+  if (callbackUrlParam && !isValidHttpUrl(callbackUrlParam, url.base)) {
+    return new InvalidCallbackUrl(
+      `Invalid callback URL. Received: ${callbackUrlParam}`
+    )
   }
 
-  if (!req.host) return "NEXTAUTH_URL"
+  const { callbackUrl: defaultCallbackUrl } = defaultCookies(
+    options.useSecureCookies ?? url.base.startsWith("https://")
+  )
+  const callbackUrlCookie =
+    req.cookies?.[options.cookies?.callbackUrl?.name ?? defaultCallbackUrl.name]
+
+  if (callbackUrlCookie && !isValidHttpUrl(callbackUrlCookie, url.base)) {
+    return new InvalidCallbackUrl(
+      `Invalid callback URL. Received: ${callbackUrlCookie}`
+    )
+  }
 
   let hasCredentials, hasEmail
   let hasTwitterOAuth2
@@ -77,12 +121,29 @@ export function assertConfig(
     }
   }
 
-  if (hasEmail && !options.adapter) {
-    return new MissingAdapter("E-mail login requires an adapter.")
+  if (hasEmail) {
+    const { adapter } = options
+    if (!adapter) {
+      return new MissingAdapter("E-mail login requires an adapter.")
+    }
+
+    const missingMethods = [
+      "createVerificationToken",
+      "useVerificationToken",
+      "getUserByEmail",
+    ].filter((method) => !adapter[method])
+
+    if (missingMethods.length) {
+      return new MissingAdapterMethods(
+        `Required adapter methods were missing: ${missingMethods.join(", ")}`
+      )
+    }
   }
 
-  if (!twitterWarned && hasTwitterOAuth2) {
-    twitterWarned = true
-    return "TWITTER_OAUTH_2_BETA"
+  if (!warned) {
+    if (hasTwitterOAuth2) warnings.push("TWITTER_OAUTH_2_BETA")
+    warned = true
   }
+
+  return warnings
 }
